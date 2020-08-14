@@ -7,6 +7,7 @@
 #ifndef NCCL_SOCKET_H_
 #define NCCL_SOCKET_H_
 
+#include <time.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
@@ -15,6 +16,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include "utils.h"
+
 
 #define MAX_IFS 16
 #define MAX_IF_NAME_SIZE 16
@@ -396,23 +398,33 @@ retry:
 static ncclResult_t socketProgressOpt(int op, int fd, void* ptr, int size, int* offset, int block) {
   int bytes = 0;
   char* data = (char*)ptr;
-  do {
-    if (op == NCCL_SOCKET_RECV) bytes = recv(fd, data+(*offset), size-(*offset), block ? 0 : MSG_DONTWAIT);
-    if (op == NCCL_SOCKET_SEND) bytes = send(fd, data+(*offset), size-(*offset), block ? 0 : MSG_DONTWAIT);
-    if (op == NCCL_SOCKET_RECV && bytes == 0) {
-      WARN("Net : Connection closed by remote peer");
-      return ncclSystemError;
-    }
-    if (bytes == -1) {
-      if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
-        WARN("Call to recv failed : %s", strerror(errno));
-        return ncclSystemError;
-      } else {
-        bytes = 0;
-      }
-    }
-    (*offset) += bytes;
-  } while (bytes > 0 && (*offset) < size);
+  float required_size = size-(*offset);
+  float bw = 100; // 100Gbps
+  long sleep_time = required_size * 8 / bw; // in nano seconds
+  struct timespec req, rem;
+  req.tv_sec = 0;
+  req.tv_nsec = sleep_time;
+  if (nanosleep(&req, &rem) < 0) {
+    WARN("Net : nanosleep failed!");
+    return ncclSystemError;
+  }
+  // do {
+  //   if (op == NCCL_SOCKET_RECV) bytes = recv(fd, data+(*offset), size-(*offset), block ? 0 : MSG_DONTWAIT);
+  //   if (op == NCCL_SOCKET_SEND) bytes = send(fd, data+(*offset), size-(*offset), block ? 0 : MSG_DONTWAIT);
+  //   if (op == NCCL_SOCKET_RECV && bytes == 0) {
+  //     WARN("Net : Connection closed by remote peer");
+  //     return ncclSystemError;
+  //   }
+  //   if (bytes == -1) {
+  //     if (errno != EINTR && errno != EWOULDBLOCK && errno != EAGAIN) {
+  //       WARN("Call to recv failed : %s", strerror(errno));
+  //       return ncclSystemError;
+  //     } else {
+  //       bytes = 0;
+  //     }
+  //   }
+  //   (*offset) += bytes;
+  // } while (bytes > 0 && (*offset) < size);
   return ncclSuccess;
 }
 
