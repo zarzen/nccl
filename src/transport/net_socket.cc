@@ -365,13 +365,13 @@ ncclResult_t ncclSocketTest(void* request, int* done, int* size) {
   }
   if (r->used == 1) { /* try to send/recv size */
     int data = r->size;
-    int offset = 0;
-    NCCLCHECK(socketProgress(r->op, r->ctrlFd, &data, sizeof(int), &offset));
+    int offset = 4;
+    // NCCLCHECK(socketProgress(r->op, r->ctrlFd, &data, sizeof(int), &offset));
 
-    if (offset == 0) return ncclSuccess; /* Not ready -- retry later */
+    // if (offset == 0) return ncclSuccess; /* Not ready -- retry later */
 
-    // Not sure we could ever receive less than 4 bytes, but just in case ...
-    if (offset < sizeof(int)) NCCLCHECK(socketWait(r->op, r->ctrlFd, &data, sizeof(int), &offset));
+    // // Not sure we could ever receive less than 4 bytes, but just in case ...
+    // if (offset < sizeof(int)) NCCLCHECK(socketWait(r->op, r->ctrlFd, &data, sizeof(int), &offset));
 
     // Check size is less or equal to the size provided by the user
     if (r->op == NCCL_SOCKET_RECV && data > r->size) {

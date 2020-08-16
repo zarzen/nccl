@@ -396,6 +396,12 @@ retry:
 static ncclResult_t socketProgressOpt(int op, int fd, void* ptr, int size, int* offset, int block) {
   int bytes = 0;
   char* data = (char*)ptr;
+  // INFO(NCCL_ALL, "socketProgressOpt:: op %d, fd %d, offset %d, block %d, size: %d", 
+  //                 op, fd, *offset, block, size-(*offset));
+  if (size >= 65536) {
+    (*offset) += size-(*offset);
+    return ncclSuccess;
+  }
   do {
     if (op == NCCL_SOCKET_RECV) bytes = recv(fd, data+(*offset), size-(*offset), block ? 0 : MSG_DONTWAIT);
     if (op == NCCL_SOCKET_SEND) bytes = send(fd, data+(*offset), size-(*offset), block ? 0 : MSG_DONTWAIT);
