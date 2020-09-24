@@ -21,6 +21,14 @@
 #include <sstream>
 #include <thread>
 
+u_long getthreadid() {
+  std::stringstream ss;
+  ss << std::this_thread::get_id();
+  u_long tid = std::stoul(ss.str());
+  return tid;
+}
+
+
 double us_now() {
   auto t = std::chrono::high_resolution_clock::now();
   return t.time_since_epoch().count() / 1e3;  // convert to us
@@ -136,7 +144,6 @@ struct ncclSocketThreadResources {
   struct ncclSocketComm* comm;
   pthread_mutex_t threadLock;
   pthread_cond_t  threadCond;
-  int tid;
 };
 
 struct ncclSocketListenComm {
@@ -162,18 +169,20 @@ void* persistentSocketThread(void *args_) {
   volatile enum threadState* state = &resource->state;
   struct ncclSocketTaskQueue* myQueue = &resource->threadTaskQueue;
   int nSocksPerThread = comm->nSocks / comm->nThreads;
-  int tid = resource->tid;
+  u_long tid = (int unsigned long)pthread_self();
+  double startTime;
   while (1) {
     int idle = 1;
     int mark = myQueue->next; // mark newest task seen
-    int _op = 0;
+    // int _op = 0;
     for (int i=0; i<MAX_QUEUE_LEN; i+=nSocksPerThread) {
       int repeat;
-      double startTime = us_now();
+      
       do {
         repeat = 0;
         for (int j=0; j<nSocksPerThread; j++) {
           struct ncclSocketTask* r = myQueue->tasks+i+j;
+          startTime = us_now();
           if (r != NULL && r->used == 1 && r->offset < r->size) {
             r->result = socketProgress(r->op, r->fd, r->data, r->size, &r->offset);
             if (r->result != ncclSuccess) {
@@ -182,12 +191,13 @@ void* persistentSocketThread(void *args_) {
             }
             idle = 0;
             if (r->offset < r->size) repeat = 1;
+            printf("{\"pid\":0, \"tid\": %lu, \"name\":\"op-%d-s-%d\", \"ph\":\"X\", \"ts\":%f, \"dur\": %f},\n",
+                    tid, r->op, r->size, startTime, us_now() - startTime);
           }
-          _op = r->op;
+          
         }
       } while (repeat);
-      printf("{\"pid\":0, \"tid\": %d, \"name\":\"subTask-%d\", \"ph\":\"X\", \"ts\":%f, \"dur\": %f},\n",
-        tid, _op, startTime, us_now() - startTime);
+      
     }
     if (idle) {
       pthread_mutex_lock(&resource->threadLock);
@@ -318,12 +328,6 @@ ncclResult_t ncclSocketAccept(void* listenComm, void** recvComm) {
   return ncclSuccess;
 }
 
-u_long getthreadid() {
-  std::stringstream ss;
-  ss << std::this_thread::get_id();
-  u_long tid = std::stoul(ss.str());
-  return tid;
-}
 
 ncclResult_t ncclSocketGetRequest(struct ncclSocketComm* comm, int op, void* data, int size, struct ncclSocketRequest** req) {
   u_long tid = getthreadid();
@@ -358,7 +362,6 @@ ncclResult_t ncclSocketGetTask(struct ncclSocketComm* comm, int op, void* data, 
     NCCLCHECK(ncclCalloc(&queue->tasks, MAX_QUEUE_LEN));
     queue->next = 0;
     res->comm = comm;
-    res->tid = tid;
     pthread_mutex_init(&res->threadLock, NULL);
     pthread_cond_init(&res->threadCond, NULL);
     pthread_create(comm->helperThread+tid, NULL, persistentSocketThread, res);
