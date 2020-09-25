@@ -249,7 +249,84 @@ void* persistentSendThread(void *args_) {
   }
 }
 
-void* persistentRecvThread(void* args_) { return NULL;}
+void* persistentRecvThread(void* args_) {
+  struct ncclSocketThreadResources* resource = (struct ncclSocketThreadResources*)args_;
+  struct ncclSocketComm* comm = resource->comm;
+  volatile enum threadState* state = &resource->state;
+  struct ncclSocketTaskQueue* taskQueue = resource->sharedTaskQueue;
+  int nSocksPerThread = comm->nSocks / comm->nThreads;
+  int tasks4Fds[MAX_SOCKETS][2]; // record pairs of req-idx and task-idx
+  // init to all -1
+  for (int i = 0; i < MAX_SOCKETS; i++) {
+    tasks4Fds[i][0] = -1; tasks4Fds[i][1] = -1;
+  }
+  int* myFds = resource->fds;
+  int infoBuf[2] = {-1, -1}; // for receiving
+  int infoSize = 2*sizeof(int);
+  // return NULL;
+  
+  while (1) {
+    int idle = 1;
+    int mark = taskQueue->next; // mark newest task seen
+
+    // recv task info, in asyn way
+    for (int i = 0; i < nSocksPerThread; i++) {
+      if (tasks4Fds[i][0] == -1) {
+        // no task assign to myFds[i]
+        // try to receive
+        int offset = 0;
+        int result = socketProgress(NCCL_SOCKET_RECV, myFds[i], infoBuf, infoSize, &offset);
+        if (result != ncclSuccess) {
+          WARN("NET/Socket : socket progress error");
+          return NULL;
+        }
+        // if already receive some bytes, then continue receive
+        if (offset > 0 && offset < infoSize) {
+          while(offset < infoSize) {
+            socketProgress(NCCL_SOCKET_RECV, myFds[i], infoBuf, infoSize, &offset);
+          }
+        }
+        // if received the task TODO improve later
+        if (offset > 0) {
+          tasks4Fds[i][0] = infoBuf[0];
+          tasks4Fds[i][1] = infoBuf[1];
+          infoBuf[0] = -1; infoBuf[1] = -1;
+        }
+        idle = 0;
+      }
+    }
+
+    // recv task data
+    for (int i = 0; i < nSocksPerThread; i++) {
+      if (tasks4Fds[i][0] > -1) {
+        ncclSocketTask* t = comm->requests[tasks4Fds[i][0]].tasks[tasks4Fds[i][1]];
+        t->result = socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
+        if (t->result != ncclSuccess) {
+          WARN("NET/Socket : socket progress error");
+          return NULL;
+        }
+        idle = 0;
+        if (t->offset == t->size) {
+          // task done, clear the flags in tasks4Fds
+          tasks4Fds[i][0] = -1; tasks4Fds[i][1] = -1;
+        }
+      }
+    }
+
+    // check status for idle
+    if (idle){
+      pthread_mutex_lock(&taskQueue->qLock);
+      while (mark == taskQueue->next && *state != stop) { // no new tasks, wait
+        pthread_cond_wait(&taskQueue->qCond, &taskQueue->qLock);
+      }
+      pthread_mutex_unlock(&taskQueue->qLock);
+    }
+
+    if (*state == stop) {
+      return NULL;
+    }
+  }
+}
 
 /* 
 void* persistentSocketThread(void *args_) {
