@@ -223,10 +223,13 @@ void* persistentSendThread(void *args_) {
       if (tasks4Fds[i] > 0) {
         // has a task to do
         struct ncclSocketTask* t = taskQueue->tasks + tasks4Fds[i];
-        t->result = socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
-        if (t->result != ncclSuccess) {
-          WARN("NET/Socket : socket progress error");
-          return NULL;
+        if (t != NULL && t->used == 1 && t->offset < t->size) {
+          t->result =
+              socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
+          if (t->result != ncclSuccess) {
+            WARN("NET/Socket : socket progress error");
+            return NULL;
+          }
         }
         idle = 0;
 
@@ -300,10 +303,13 @@ void* persistentRecvThread(void* args_) {
     for (int i = 0; i < nSocksPerThread; i++) {
       if (tasks4Fds[i][0] > -1) {
         ncclSocketTask* t = comm->requests[tasks4Fds[i][0]].tasks[tasks4Fds[i][1]];
-        t->result = socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
-        if (t->result != ncclSuccess) {
-          WARN("NET/Socket : socket progress error");
-          return NULL;
+        if (t != NULL && t->used == 1 && t->offset < t->size) {
+          t->result =
+              socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
+          if (t->result != ncclSuccess) {
+            WARN("NET/Socket : socket progress error");
+            return NULL;
+          }
         }
         idle = 0;
         if (t->offset == t->size) {
