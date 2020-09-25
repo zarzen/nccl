@@ -178,9 +178,11 @@ struct ncclSocketComm {
 };
 
 void* persistentSendThread(void *args_) {
+  INFO(NCCL_INIT|NCCL_NET, "entering send thread");
   // u_long tid = (int unsigned long)pthread_self();
   struct ncclSocketThreadResources* resource = (struct ncclSocketThreadResources*)args_;
   struct ncclSocketComm* comm = resource->comm;
+  INFO(NCCL_INIT|NCCL_NET, "resource ptr %p, comm ptr %p", resource, comm);
   volatile enum threadState* state = &resource->state;
   struct ncclSocketTaskQueue* taskQueue = resource->sharedTaskQueue;
   int nSocksPerThread = comm->nSocks / comm->nThreads;
@@ -191,7 +193,7 @@ void* persistentSendThread(void *args_) {
   }
   int infoBuf[2]; // request idx, task idx
   int* myFds = resource->fds;
-
+  INFO(NCCL_INIT|NCCL_NET, "starting persistentSendThread with task queue ptr %p", taskQueue);
   while (1) {
     int idle = 1;
     int mark = taskQueue->next; // mark newest task seen
@@ -253,6 +255,7 @@ void* persistentSendThread(void *args_) {
 }
 
 void* persistentRecvThread(void* args_) {
+  INFO(NCCL_INIT|NCCL_NET, "entering recv thread");
   struct ncclSocketThreadResources* resource = (struct ncclSocketThreadResources*)args_;
   struct ncclSocketComm* comm = resource->comm;
   volatile enum threadState* state = &resource->state;
@@ -267,7 +270,7 @@ void* persistentRecvThread(void* args_) {
   int infoBuf[2] = {-1, -1}; // for receiving
   int infoSize = 2*sizeof(int);
   // return NULL;
-  
+  INFO(NCCL_INIT|NCCL_NET, "starting persistentRecvThread with task queue ptr %p", taskQueue);
   while (1) {
     int idle = 1;
     int mark = taskQueue->next; // mark newest task seen
@@ -453,6 +456,8 @@ ncclResult_t ncclSocketInitComm(struct ncclSocketComm* comm, bool isRecv) {
     struct ncclSocketThreadResources* res = comm->threadResources+i;
     int qidx = i % qSize;
     res->sharedTaskQueue = &comm->tasksQueues[qidx];
+    res->comm = comm;
+    INFO(NCCL_INIT, "res->sharedTaskQueue %p", res->sharedTaskQueue);
     pthread_mutex_init(&res->threadLock, NULL);
     pthread_cond_init(&res->threadCond, NULL);
     if (isRecv) {
@@ -471,6 +476,7 @@ ncclResult_t ncclSocketInitComm(struct ncclSocketComm* comm, bool isRecv) {
       res->fds[j] = comm->fds[i * nSockPerThread + j];
     }
   }
+  INFO(NCCL_INIT|NCCL_NET, "ncclSocketInitComm done, ctrl fd %d (%s), nQueue %d", comm->ctrlFd, isRecv? "recv-comm":"send-comm", qSize);
   return ncclSuccess;
 }
 
