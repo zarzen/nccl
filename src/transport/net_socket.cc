@@ -554,8 +554,8 @@ ncclResult_t ncclSocketGetRequest(struct ncclSocketComm* comm, int op, void* dat
       r->posIdx = i;
       *req = r;
       // printf("ncclSocketGetRequest, assign to location %d", i);
-      printf("{\"pid\":0, \"tid\": %lu, \"name\":\"getReqAt-%d\", \"ph\":\"X\", \"ts\":%f, \"dur\": %f},\n",
-        tid, i, startTime, us_now() - startTime);
+      // printf("{\"pid\":0, \"tid\": %lu, \"name\":\"getReqAt-%d\", \"ph\":\"X\", \"ts\":%f, \"dur\": %f},\n",
+      //   tid, i, startTime, us_now() - startTime);
       return ncclSuccess;
     }
   }
