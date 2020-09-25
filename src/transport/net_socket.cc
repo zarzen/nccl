@@ -134,7 +134,7 @@ struct ncclSocketRequest {
   int ctrlFd;
   int used;
   struct ncclSocketComm* comm;
-  struct ncclSocketTask* tasks[MAX_SOCKETS];
+  struct ncclSocketTask* tasks[MAX_QUEUE_LEN];
   int nSubs;
 };
 
@@ -178,7 +178,7 @@ struct ncclSocketComm {
 };
 
 void* persistentSendThread(void *args_) {
-  u_long tid = (int unsigned long)pthread_self();
+  // u_long tid = (int unsigned long)pthread_self();
   struct ncclSocketThreadResources* resource = (struct ncclSocketThreadResources*)args_;
   struct ncclSocketComm* comm = resource->comm;
   volatile enum threadState* state = &resource->state;
@@ -192,7 +192,6 @@ void* persistentSendThread(void *args_) {
   int infoBuf[2]; // request idx, task idx
   int* myFds = resource->fds;
 
-  double startTime;
   while (1) {
     int idle = 1;
     int mark = taskQueue->next; // mark newest task seen
@@ -250,7 +249,7 @@ void* persistentSendThread(void *args_) {
   }
 }
 
-void* persistentRecvThread(void* args_) {}
+void* persistentRecvThread(void* args_) { return NULL;}
 
 /* 
 void* persistentSocketThread(void *args_) {
@@ -553,7 +552,8 @@ ncclResult_t ncclSocketTest(void* request, int* done, int* size) {
     int chunkOffset = 0, i = 0;
     while (chunkOffset < r->size) {
       int chunkSize = std::min(taskSize, r->size-chunkOffset);
-      NCCLCHECK(ncclSocketGetTask(r->comm, r->op, (char*)(r->data)+chunkOffset, chunkSize, r->tasks+i++, r->posIdx, i - 1));
+      NCCLCHECK(ncclSocketGetTask(r->comm, r->op, (char*)(r->data)+chunkOffset, chunkSize, r->tasks+i, r->posIdx, i - 1));
+      i++;
       chunkOffset += chunkSize;
     }
     r->nSubs = i;
