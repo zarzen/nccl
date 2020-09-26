@@ -213,7 +213,7 @@ void* persistentSendThread(void *args_) {
     }
     // send the info of the task if not yet
     for (int i = 0; i < nSocksPerThread; i++) {
-      if (sentInfo[i] != 1 && myFds[i] > 0) {
+      if (tasks4Fds[i] > 0 && sentInfo[i] != 1 && myFds[i] > 0) {
         struct ncclSocketTask* t = taskQueue->tasks + tasks4Fds[i];
         infoBuf[0] = t->reqIdx; infoBuf[1] = t->posIdx;
         socketSend(myFds[i], (void*)infoBuf, 2 * sizeof(int));
