@@ -843,7 +843,7 @@ ncclResult_t ncclSocketIrecv(void *recvComm, void *data, int size, void *mhandle
   struct ncclSocketComm *comm = (struct ncclSocketComm *)recvComm;
   NCCLCHECK(ncclSocketGetRequest(comm, NCCL_SOCKET_RECV, data, size, (struct ncclSocketRequest **)request));
   struct ncclSocketRequest ** r = (struct ncclSocketRequest **)request;
-  INFO(NCCL_ALL, "init req-%s-%d, ctrlFd %d", "send", (*r)->posIdx, comm->ctrlFd);
+  INFO(NCCL_ALL, "init req-%s-%d, ctrlFd %d", "recv", (*r)->posIdx, comm->ctrlFd);
   return ncclSuccess;
 }
 
