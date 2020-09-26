@@ -171,6 +171,7 @@ enum threadState
 
 struct ncclSocketThreadResources
 {
+  int tidx;
   struct ncclSocketTaskQueue *sharedTaskQueue;
   enum threadState state;
   struct ncclSocketComm *comm;
@@ -203,7 +204,6 @@ struct ncclSocketComm
 
 void *persistentSendThread(void *args_)
 {
-  u_long tid = (int unsigned long)pthread_self();
   struct ncclSocketThreadResources *resource = (struct ncclSocketThreadResources *)args_;
   struct ncclSocketComm *comm = resource->comm;
 
@@ -254,7 +254,8 @@ void *persistentSendThread(void *args_)
         infoBuf[1] = t->posIdx;
         socketSend(myFds[i], (void *)infoBuf, 2 * sizeof(int));
         sentInfo[i] = 1;
-        // INFO(NCCL_ALL, "send %lu, fd-%d %d, send %d-%d", tid, i, myFds[i], infoBuf[0], infoBuf[1]);
+        INFO(NCCL_ALL, "tid %d, send-fd %d-%d, info %d-%d", resource->tidx, i, myFds[i], infoBuf[0], infoBuf[1]);
+
       }
     }
     // INFO(NCCL_INIT|NCCL_NET, "send thd, sent task info");
@@ -290,7 +291,7 @@ void *persistentSendThread(void *args_)
     // INFO(NCCL_INIT|NCCL_NET, "send thd, sent task data");
     if (idle)
     {
-      INFO(NCCL_INIT | NCCL_NET, "tid %lu, send thd, enter idle", tid);
+      INFO(NCCL_INIT | NCCL_NET, "tid %d, send thd, enter idle", resource->tidx);
       // pthread_mutex_lock(&resource->threadLock);
       pthread_mutex_lock(&taskQueue->qLock);
       while (mark == taskQueue->next && *state != stop)
@@ -306,7 +307,6 @@ void *persistentSendThread(void *args_)
 
 void *persistentRecvThread(void *args_)
 {
-  u_long tid = (int unsigned long)pthread_self();
   struct ncclSocketThreadResources *resource = (struct ncclSocketThreadResources *)args_;
   struct ncclSocketComm *comm = resource->comm;
   volatile enum threadState *state = &resource->state;
@@ -357,7 +357,7 @@ void *persistentRecvThread(void *args_)
         {
           tasks4Fds[i][0] = infoBuf[0];
           tasks4Fds[i][1] = infoBuf[1];
-          // INFO(NCCL_ALL, "recv %lu, task %d-%d", tid, infoBuf[0], infoBuf[1]);
+          INFO(NCCL_ALL, "tid %d, recv-fd %d-%d, task %d-%d", resource->tidx, i, myFds[i], infoBuf[0], infoBuf[1]);
           infoBuf[0] = -1;
           infoBuf[1] = -1;
           idle = 0;
@@ -412,7 +412,7 @@ void *persistentRecvThread(void *args_)
     // check status for idle
     if (idle)
     {
-      INFO(NCCL_INIT | NCCL_NET, "tid %lu, recv thd, enter idle", tid);
+      INFO(NCCL_INIT | NCCL_NET, "tid %d, recv thd, enter idle", resource->tidx);
       pthread_mutex_lock(&taskQueue->qLock);
       while (mark == taskQueue->next && *state != stop)
       { // no new tasks, wait
@@ -555,11 +555,12 @@ ncclResult_t ncclSocketInitComm(struct ncclSocketComm *comm, bool isRecv)
     INFO(NCCL_ALL, "test task queue item at, 0 ptr %p, 127 ptr %p, 255 ptr %p", comm->tasksQueues[i].tasks,
          comm->tasksQueues[i].tasks + 127, comm->tasksQueues[i].tasks + 255);
   }
-  INFO(NCCL_ALL, "test comm req tasks ptr, 0-ptr %p, 127 ptr %p", comm->requests[0].tasks[0], comm->requests[0].tasks[127]);
+  // INFO(NCCL_ALL, "test comm req tasks ptr, 0-ptr %p, 127 ptr %p", comm->requests[0].tasks[0], comm->requests[0].tasks[127]);
   // create helper threads, and assign task queue to helper threads
   for (int i = 0; i < comm->nThreads; ++i)
   {
     struct ncclSocketThreadResources *res = comm->threadResources + i;
+    res->tidx = i;
     int qidx = i % qSize;
     res->sharedTaskQueue = &comm->tasksQueues[qidx];
     res->comm = comm;
