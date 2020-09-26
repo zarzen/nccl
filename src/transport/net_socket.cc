@@ -277,7 +277,7 @@ void* persistentRecvThread(void* args_) {
 
     // recv task info, in asyn way
     for (int i = 0; i < nSocksPerThread; i++) {
-      if (tasks4Fds[i][0] == -1) {
+      if (tasks4Fds[i][0] < 0) {
         // no task assign to myFds[i]
         // try to receive
         int offset = 0;
@@ -297,6 +297,8 @@ void* persistentRecvThread(void* args_) {
           tasks4Fds[i][0] = infoBuf[0];
           tasks4Fds[i][1] = infoBuf[1];
           infoBuf[0] = -1; infoBuf[1] = -1;
+          idle = 0;
+
         }
         idle = 0;
       }
@@ -305,7 +307,8 @@ void* persistentRecvThread(void* args_) {
     // recv task data
     for (int i = 0; i < nSocksPerThread; i++) {
       if (tasks4Fds[i][0] > -1) {
-        ncclSocketTask* t = comm->requests[tasks4Fds[i][0]].tasks[tasks4Fds[i][1]];
+        ncclSocketRequest* r = &comm->requests[tasks4Fds[i][0]];
+        ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
         if (t != NULL && t->used == 1 && t->offset < t->size) {
           t->result =
               socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
@@ -641,7 +644,7 @@ ncclResult_t ncclSocketTest(void* request, int* done, int* size) {
     int chunkOffset = 0, i = 0;
     while (chunkOffset < r->size) {
       int chunkSize = std::min(taskSize, r->size-chunkOffset);
-      NCCLCHECK(ncclSocketGetTask(r->comm, r->op, (char*)(r->data)+chunkOffset, chunkSize, r->tasks+i, r->posIdx, i - 1));
+      NCCLCHECK(ncclSocketGetTask(r->comm, r->op, (char*)(r->data)+chunkOffset, chunkSize, r->tasks+i, r->posIdx, i));
       i++;
       chunkOffset += chunkSize;
     }
