@@ -313,12 +313,12 @@ void* persistentRecvThread(void* args_) {
             WARN("NET/Socket : socket progress error");
             return NULL;
           }
+          if (t->offset == t->size) {
+            // task done, clear the flags in tasks4Fds
+            tasks4Fds[i][0] = -1; tasks4Fds[i][1] = -1;
+          }
         }
         idle = 0;
-        if (t->offset == t->size) {
-          // task done, clear the flags in tasks4Fds
-          tasks4Fds[i][0] = -1; tasks4Fds[i][1] = -1;
-        }
       }
     }
 
