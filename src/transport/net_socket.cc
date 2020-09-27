@@ -901,11 +901,12 @@ ncclResult_t ncclSocketClose(void *opaqueComm)
         pthread_cond_signal(&res->threadCond);
         pthread_mutex_unlock(&res->threadLock);
         pthread_mutex_lock(&res->sharedTaskQueue->qLock);
-        pthread_cond_signal(&res->sharedTaskQueue->qCond);
+        pthread_cond_broadcast(&res->sharedTaskQueue->qCond);
         pthread_mutex_unlock(&res->sharedTaskQueue->qLock);
         pthread_join(comm->helperThread[i], NULL);
       }
       // free(res->sharedTaskQueue.tasks);
+      INFO(NCCL_ALL, "joined comm-%d, tid-%d", comm->ctrlFd, i);
     }
     // carefully address the free operation
     for (int i = 0; i < comm->nTaskQ; i++)
