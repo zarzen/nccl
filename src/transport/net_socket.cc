@@ -381,33 +381,39 @@ void *persistentRecvThread(void *args_)
       {
         int reqPos = comm->cnt2pos[tasks4Fds[i][0]];
         ncclSocketRequest *r = &comm->requests[reqPos];
-        ncclSocketTask *t = r->tasks[tasks4Fds[i][1]];
-        if (t != NULL && t->used == 1 && t->offset < t->size)
-        {
-          t->result =
-              socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
-          if (t->result != ncclSuccess)
+        if (r == NULL || r->used != 2) {
+          // request is not ready
+          continue;
+        } else {
+          ncclSocketTask *t = r->tasks[tasks4Fds[i][1]];
+          if (t != NULL && t->used == 1 && t->offset < t->size)
           {
-            WARN("NET/Socket : socket progress error");
-            return NULL;
+            t->result =
+                socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
+            if (t->result != ncclSuccess)
+            {
+              WARN("NET/Socket : socket progress error");
+              return NULL;
+            }
+            if (t->offset == t->size)
+            {
+              // task done, clear the flags in tasks4Fds
+              tasks4Fds[i][0] = -1;
+              tasks4Fds[i][1] = -1;
+              // INFO(NCCL_ALL, "recv completed, task %d-%d, task ptr %p, size %d, offset %d", t->reqIdx, t->posIdx, t, t->size, t->offset);
+            }
           }
-          if (t->offset == t->size)
+          else
           {
-            // task done, clear the flags in tasks4Fds
-            tasks4Fds[i][0] = -1;
-            tasks4Fds[i][1] = -1;
-            // INFO(NCCL_ALL, "recv completed, task %d-%d, task ptr %p, size %d, offset %d", t->reqIdx, t->posIdx, t, t->size, t->offset);
+            // if (t != NULL) {
+            //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p, used %d", tasks4Fds[i][0], r, tasks4Fds[i][1], t, t->used);
+            // } else {
+            //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p", tasks4Fds[i][0], r, tasks4Fds[i][1], t);
+            // }
+            // null ptr of task or
           }
         }
-        else
-        {
-          // if (t != NULL) {
-          //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p, used %d", tasks4Fds[i][0], r, tasks4Fds[i][1], t, t->used);
-          // } else {
-          //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p", tasks4Fds[i][0], r, tasks4Fds[i][1], t);
-          // }
-          // null ptr of task or
-        }
+        
         idle = 0;
       }
     }
