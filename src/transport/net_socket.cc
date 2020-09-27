@@ -143,7 +143,7 @@ struct ncclSocketTask
 
 struct ncclSocketRequest
 {
-  int posIdx; // position of the request in the comm->requests[]
+  int reqIdx; // record the location store position in comm requests
   int op;
   void *data;
   int size;
@@ -196,6 +196,8 @@ struct ncclSocketComm
   // int nextFd;
   int nTaskQ;
   int nextTaskQ; // put task in round robin way
+  int cnt; // loop cnt 0 -> MAX_REQUESTS
+  int cnt2pos[MAX_REQUESTS];
   struct ncclSocketRequest requests[MAX_REQUESTS];
   pthread_t helperThread[MAX_THREADS];
   struct ncclSocketThreadResources threadResources[MAX_THREADS];
@@ -377,7 +379,8 @@ void *persistentRecvThread(void *args_)
     {
       if (tasks4Fds[i][0] > -1)
       {
-        ncclSocketRequest *r = &comm->requests[tasks4Fds[i][0]];
+        int reqPos = comm->cnt2pos[tasks4Fds[i][0]];
+        ncclSocketRequest *r = &comm->requests[reqPos];
         ncclSocketTask *t = r->tasks[tasks4Fds[i][1]];
         if (t != NULL && t->used == 1 && t->offset < t->size)
         {
@@ -690,7 +693,10 @@ ncclResult_t ncclSocketGetRequest(struct ncclSocketComm *comm, int op, void *dat
       r->used = 1;
       r->comm = comm;
       r->nSubs = 0;
-      r->posIdx = i;
+      // r->posIdx = i;
+      r->reqIdx = comm->cnt;
+      comm->cnt2pos[comm->cnt] = i;
+      comm->cnt = (comm->cnt + 1) % MAX_REQUESTS;
       *req = r;
       // printf("ncclSocketGetRequest, assign to location %d", i);
       // printf("{\"pid\":0, \"tid\": %lu, \"name\":\"getReqAt-%d\", \"ph\":\"X\", \"ts\":%f, \"dur\": %f},\n",
@@ -702,7 +708,7 @@ ncclResult_t ncclSocketGetRequest(struct ncclSocketComm *comm, int op, void *dat
   return ncclInternalError;
 }
 
-ncclResult_t ncclSocketGetTask(struct ncclSocketComm *comm, int op, void *data, int size, struct ncclSocketTask **req, int pidx, int selfPos)
+ncclResult_t ncclSocketGetTask(struct ncclSocketComm *comm, int op, void *data, int size, struct ncclSocketTask **req, int reqCnt, int selfPos)
 {
   int qidx = comm->nextTaskQ % comm->nTaskQ;
   // struct ncclSocketThreadResources* res = comm->threadResources+tid;
@@ -723,7 +729,7 @@ ncclResult_t ncclSocketGetTask(struct ncclSocketComm *comm, int op, void *data, 
     t->result = ncclSuccess;
     comm->nextTaskQ = (comm->nextTaskQ + 1) % comm->nTaskQ;
     t->used = 1;
-    t->reqIdx = pidx; // record the parent request position idx
+    t->reqIdx = reqCnt; // record the parent request position idx
     t->posIdx = selfPos;
     *req = t;
     // INFO(NCCL_ALL, "get task, op %s, **req ptr %p, *req %p, size %d, posIdx %d", op==0? "send":"recv", req, *req, t->size, selfPos);
@@ -782,15 +788,15 @@ ncclResult_t ncclSocketTest(void *request, int *done, int *size)
     while (chunkOffset < r->size)
     {
       int chunkSize = std::min(taskSize, r->size - chunkOffset);
-      NCCLCHECK(ncclSocketGetTask(r->comm, r->op, (char *)(r->data) + chunkOffset, chunkSize, r->tasks + i, r->posIdx, i));
+      NCCLCHECK(ncclSocketGetTask(r->comm, r->op,
+                                  (char *)(r->data) + chunkOffset, chunkSize,
+                                  r->tasks + i, r->reqIdx, i));
       i++;
       chunkOffset += chunkSize;
     }
     r->nSubs = i;
-    INFO(NCCL_ALL, "split req-%s-%d, size %d, nSub %d, ctrlFd %d", 
-                    r->op == 0 ? "send" : "recv",
-                    r->posIdx,
-                    r->size, r->nSubs, r->ctrlFd);
+    INFO(NCCL_ALL, "split req-%s-%d, size %d, nSub %d, ctrlFd %d",
+         r->op == 0 ? "send" : "recv", r->reqIdx, r->size, r->nSubs, r->ctrlFd);
   }
   if (r->used == 2)
   { // already exchanged size
@@ -816,7 +822,7 @@ ncclResult_t ncclSocketTest(void *request, int *done, int *size)
       }
       INFO(NCCL_ALL, "comp req-%s-%d, size %d, nSub %d, nComp %d, ctrlFd %d", 
                     r->op == 0 ? "send" : "recv",
-                    r->posIdx,
+                    r->reqIdx,
                     r->size, r->nSubs, nCompleted, r->ctrlFd);
     }
 
@@ -835,7 +841,7 @@ ncclResult_t ncclSocketIsend(void *sendComm, void *data, int size, void *mhandle
   struct ncclSocketComm *comm = (struct ncclSocketComm *)sendComm;
   NCCLCHECK(ncclSocketGetRequest(comm, NCCL_SOCKET_SEND, data, size, (struct ncclSocketRequest **)request));
   struct ncclSocketRequest ** r = (struct ncclSocketRequest **)request;
-  INFO(NCCL_ALL, "init req-%s-%d, ctrlFd %d", "send", (*r)->posIdx, comm->ctrlFd);
+  INFO(NCCL_ALL, "init req-%s-%d, ctrlFd %d", "send", (*r)->reqIdx, comm->ctrlFd);
   return ncclSuccess;
 }
 
@@ -844,7 +850,7 @@ ncclResult_t ncclSocketIrecv(void *recvComm, void *data, int size, void *mhandle
   struct ncclSocketComm *comm = (struct ncclSocketComm *)recvComm;
   NCCLCHECK(ncclSocketGetRequest(comm, NCCL_SOCKET_RECV, data, size, (struct ncclSocketRequest **)request));
   struct ncclSocketRequest ** r = (struct ncclSocketRequest **)request;
-  INFO(NCCL_ALL, "init req-%s-%d, ctrlFd %d", "recv", (*r)->posIdx, comm->ctrlFd);
+  INFO(NCCL_ALL, "init req-%s-%d, ctrlFd %d", "recv", (*r)->reqIdx, comm->ctrlFd);
   return ncclSuccess;
 }
 
