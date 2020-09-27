@@ -264,6 +264,7 @@ void *persistentSendThread(void *args_)
     {
       if (tasks4Fds[i] > -1)
       {
+        idle = 0;
         // has a task to do
         struct ncclSocketTask *t = taskQueue->tasks + tasks4Fds[i];
         // INFO(NCCL_ALL, "send thd, send data, task ptr %p", t);
@@ -277,7 +278,7 @@ void *persistentSendThread(void *args_)
             return NULL;
           }
         }
-        idle = 0;
+        
 
         if (t->offset == t->size)
         {
@@ -291,12 +292,13 @@ void *persistentSendThread(void *args_)
     // INFO(NCCL_INIT|NCCL_NET, "send thd, sent task data");
     if (idle)
     {
-      INFO(NCCL_INIT | NCCL_NET, "tid %d, send thd, enter idle", resource->tidx);
       // pthread_mutex_lock(&resource->threadLock);
       pthread_mutex_lock(&taskQueue->qLock);
       while (mark == taskQueue->next && *state != stop)
       { // no new tasks, wait
+        INFO(NCCL_INIT | NCCL_NET, "tid %d, send thd, enter idle", resource->tidx);
         pthread_cond_wait(&taskQueue->qCond, &taskQueue->qLock);
+        INFO(NCCL_ALL, "tid %d, send thd, wakeup", resource->tidx);
       }
       pthread_mutex_unlock(&taskQueue->qLock);
     }
@@ -350,6 +352,7 @@ void *persistentRecvThread(void *args_)
           while (offset < infoSize)
           {
             socketProgress(NCCL_SOCKET_RECV, myFds[i], infoBuf, infoSize, &offset);
+            INFO(NCCL_ALL, "progress>>>>>");
           }
         }
         // if received the task TODO improve later
@@ -370,13 +373,14 @@ void *persistentRecvThread(void *args_)
         // INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d", i, myFds[i], tasks4Fds[i][0], tasks4Fds[i][1]);
       }
     }
-    // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d", _debug_cntr);
+    INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d", _debug_cntr);
     _debug_cntr = 0;
     // recv task data
     for (int i = 0; i < nSocksPerThread; i++)
     {
       if (tasks4Fds[i][0] > -1)
-      {
+      { 
+        idle = 0;
         ncclSocketRequest *r = &comm->requests[tasks4Fds[i][0]];
         ncclSocketTask *t = r->tasks[tasks4Fds[i][1]];
         if (t != NULL && t->used == 1 && t->offset < t->size)
@@ -393,30 +397,31 @@ void *persistentRecvThread(void *args_)
             // task done, clear the flags in tasks4Fds
             tasks4Fds[i][0] = -1;
             tasks4Fds[i][1] = -1;
-            // INFO(NCCL_ALL, "recv completed, task %d-%d, task ptr %p, size %d, offset %d", t->reqIdx, t->posIdx, t, t->size, t->offset);
+            INFO(NCCL_ALL, "comp recv-task %d-%d, size %d, offset %d", t->reqIdx, t->posIdx, t->size, t->offset);
           }
         }
         else
         {
-          // if (t != NULL) {
-          //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p, used %d", tasks4Fds[i][0], r, tasks4Fds[i][1], t, t->used);
-          // } else {
-          //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p", tasks4Fds[i][0], r, tasks4Fds[i][1], t);
-          // }
+          if (t != NULL) {
+            INFO(NCCL_ALL, "inprog recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p, used %d", tasks4Fds[i][0], r, tasks4Fds[i][1], t, t->used);
+          } else {
+            // INFO(NCCL_ALL, "inprog recv data, reqidx %d, req ptr %p, task-idx %d, task ptr %p", tasks4Fds[i][0], r, tasks4Fds[i][1], t);
+          }
           // null ptr of task or
         }
-        idle = 0;
+        
       }
     }
     // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task task data");
     // check status for idle
     if (idle)
     {
-      INFO(NCCL_INIT | NCCL_NET, "tid %d, recv thd, enter idle", resource->tidx);
       pthread_mutex_lock(&taskQueue->qLock);
       while (mark == taskQueue->next && *state != stop)
       { // no new tasks, wait
+        INFO(NCCL_INIT | NCCL_NET, "tid %d, recv thd, enter idle", resource->tidx);
         pthread_cond_wait(&taskQueue->qCond, &taskQueue->qLock);
+        INFO(NCCL_ALL, "tid %d, recv thd, wakeup", resource->tidx);
       }
       pthread_mutex_unlock(&taskQueue->qLock);
     }
