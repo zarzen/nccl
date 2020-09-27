@@ -874,6 +874,7 @@ ncclResult_t ncclSocketFlush(void *recvComm, void *data, int size, void *mhandle
 
 ncclResult_t ncclSocketCloseListen(void *opaqueComm)
 {
+  // WARN("ncclSocketCloseListen");
   struct ncclSocketListenComm *comm = (struct ncclSocketListenComm *)opaqueComm;
   if (comm)
   {
@@ -890,7 +891,8 @@ ncclResult_t ncclSocketClose(void *opaqueComm)
   if (comm)
   {
     for (int i = 0; i < comm->nThreads; i++)
-    {
+    { 
+      INFO(NCCL_ALL, "exiting comm-%d, tid-%d", comm->ctrlFd, i);
       struct ncclSocketThreadResources *res = comm->threadResources + i;
       if (comm->helperThread[i])
       {
@@ -898,6 +900,9 @@ ncclResult_t ncclSocketClose(void *opaqueComm)
         res->state = stop;
         pthread_cond_signal(&res->threadCond);
         pthread_mutex_unlock(&res->threadLock);
+        pthread_mutex_lock(&res->sharedTaskQueue->qLock);
+        pthread_cond_signal(&res->sharedTaskQueue->qCond);
+        pthread_mutex_unlock(&res->sharedTaskQueue->qLock);
         pthread_join(comm->helperThread[i], NULL);
       }
       // free(res->sharedTaskQueue.tasks);
