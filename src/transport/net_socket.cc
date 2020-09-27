@@ -11,6 +11,7 @@
 #include "param.h"
 
 #include <assert.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -372,10 +373,11 @@ void *persistentRecvThread(void *args_)
       }
       else
       {
-        // INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d", i, myFds[i], tasks4Fds[i][0], tasks4Fds[i][1]);
+        INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d", i, myFds[i], tasks4Fds[i][0], tasks4Fds[i][1]);
       }
     }
-    INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d", _debug_cntr);
+    // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d", _debug_cntr);
+    usleep(500000);
     _debug_cntr = 0;
     // recv task data
     for (int i = 0; i < nSocksPerThread; i++)
@@ -422,17 +424,17 @@ void *persistentRecvThread(void *args_)
     }
     // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task task data");
     // check status for idle
-    if (idle)
-    {
-      pthread_mutex_lock(&taskQueue->qLock);
-      while (mark == taskQueue->next && *state != stop)
-      { // no new tasks, wait
-        INFO(NCCL_INIT | NCCL_NET, "tid %d, recv thd, enter idle", resource->tidx);
-        pthread_cond_wait(&taskQueue->qCond, &taskQueue->qLock);
-        INFO(NCCL_ALL, "tid %d, recv thd, wakeup", resource->tidx);
-      }
-      pthread_mutex_unlock(&taskQueue->qLock);
-    }
+    // if (idle)
+    // {
+    //   pthread_mutex_lock(&taskQueue->qLock);
+    //   while (mark == taskQueue->next && *state != stop)
+    //   { // no new tasks, wait
+    //     INFO(NCCL_INIT | NCCL_NET, "tid %d, recv thd, enter idle", resource->tidx);
+    //     pthread_cond_wait(&taskQueue->qCond, &taskQueue->qLock);
+    //     INFO(NCCL_ALL, "tid %d, recv thd, wakeup", resource->tidx);
+    //   }
+    //   pthread_mutex_unlock(&taskQueue->qLock);
+    // }
 
     if (*state == stop)
     {
