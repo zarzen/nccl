@@ -910,7 +910,7 @@ ncclResult_t ncclSocketClose(void *opaqueComm)
     // carefully address the free operation
     for (int i = 0; i < comm->nTaskQ; i++)
     {
-      free(&comm->tasksQueues[i]);
+      free(comm->tasksQueues[i].tasks);
     }
     if (comm->ctrlFd != -1)
       close(comm->ctrlFd);
