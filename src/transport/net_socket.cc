@@ -230,8 +230,8 @@ void* persistentSendThread(void* args_) {
         infoBuf[1] = t->posIdx;
         socketSend(myFds[i], (void*)infoBuf, 2 * sizeof(int));
         sentInfo[i] = 1;
-        INFO(NCCL_ALL, "tid %d, send-fd %d-%d, info %d-%d", resource->tidx, i,
-             myFds[i], infoBuf[0], infoBuf[1]);
+        // INFO(NCCL_ALL, "tid %d, send-fd %d-%d, info %d-%d", resource->tidx, i,
+        //      myFds[i], infoBuf[0], infoBuf[1]);
       }
     }
     // INFO(NCCL_INIT|NCCL_NET, "send thd, sent task info");
@@ -318,15 +318,15 @@ void* persistentRecvThread(void* args_) {
           while (offset < infoSize) {
             socketProgress(NCCL_SOCKET_RECV, myFds[i], infoBuf, infoSize,
                            &offset);
-            INFO(NCCL_ALL, "progress>>>>>");
+            // INFO(NCCL_ALL, "progress>>>>>");
           }
         }
         // if received the task TODO improve later
         if (offset > 0) {
           tasks4Fds[i][0] = infoBuf[0];
           tasks4Fds[i][1] = infoBuf[1];
-          INFO(NCCL_ALL, "tid %d, recv-fd %d-%d, task %d-%d", resource->tidx, i,
-               myFds[i], infoBuf[0], infoBuf[1]);
+          // INFO(NCCL_ALL, "tid %d, recv-fd %d-%d, task %d-%d", resource->tidx, i,
+          //      myFds[i], infoBuf[0], infoBuf[1]);
           infoBuf[0] = -1;
           infoBuf[1] = -1;
           idle = 0;
@@ -334,19 +334,19 @@ void* persistentRecvThread(void* args_) {
           _debug_cntr++;
         }
       } else {
-        int reqPos = comm->cnt2pos[tasks4Fds[i][0]];
-        ncclSocketRequest* r = &comm->requests[reqPos];
-        if (r != NULL) {
-          ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
-          if (t != NULL) {
-            INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d, t-used %d", i, myFds[i],
-              tasks4Fds[i][0], tasks4Fds[i][1], r->used, t->used);
-          } else {
-            INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d", i, myFds[i],
-              tasks4Fds[i][0], tasks4Fds[i][1], r->used);
-          }
+        // int reqPos = comm->cnt2pos[tasks4Fds[i][0]];
+        // ncclSocketRequest* r = &comm->requests[reqPos];
+        // if (r != NULL) {
+        //   ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
+        //   if (t != NULL) {
+        //     INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d, t-used %d", i, myFds[i],
+        //       tasks4Fds[i][0], tasks4Fds[i][1], r->used, t->used);
+        //   } else {
+        //     INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d", i, myFds[i],
+        //       tasks4Fds[i][0], tasks4Fds[i][1], r->used);
+        //   }
           
-        }
+        // }
         
       }
     }
