@@ -117,7 +117,7 @@ ncclResult_t GetSocketAddr(int dev, union socketAddress *addr)
 #define MIN_CHUNKSIZE (64 * 1024)
 #define MAX_NQ 8
 #define Q_SHARE 4 // for each 4 threads share one tasks queue
-#define TASK_SIZE (64 * 1024)
+#define TASK_SIZE (128 * 1024)
 
 NCCL_PARAM(SocketNsocksPerThread, "NSOCKS_PERTHREAD", -2);
 NCCL_PARAM(SocketNthreads, "SOCKET_NTHREADS", -2);
