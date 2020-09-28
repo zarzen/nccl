@@ -291,8 +291,6 @@ void* persistentRecvThread(void* args_) {
     tasks4Fds[i][1] = -1;
   }
   int* myFds = resource->fds;
-  int infoBuf[2] = {-1, -1};  // for receiving
-  int infoSize = 2 * sizeof(int);
   // return NULL;
   // INFO(NCCL_INIT|NCCL_NET, "initialized recv thd, task queue ptr %p, state
   // ptr %p", taskQueue, state);
@@ -307,6 +305,9 @@ void* persistentRecvThread(void* args_) {
         // no task assign to myFds[i]
         // try to receive
         int offset = 0;
+        int infoBuf[2] = {-1, -1};  // for receiving
+        int infoSize = 2 * sizeof(int);
+	
         int result = socketProgress(NCCL_SOCKET_RECV, myFds[i], infoBuf,
                                     infoSize, &offset);
         if (result != ncclSuccess) {
@@ -325,10 +326,10 @@ void* persistentRecvThread(void* args_) {
         if (offset > 0) {
           tasks4Fds[i][0] = infoBuf[0];
           tasks4Fds[i][1] = infoBuf[1];
-          // INFO(NCCL_ALL, "tid %d, recv-fd %d-%d, task %d-%d", resource->tidx, i,
-          //      myFds[i], infoBuf[0], infoBuf[1]);
-          infoBuf[0] = -1;
-          infoBuf[1] = -1;
+          INFO(NCCL_ALL, "tid %d, recv-fd %d-%d, task %d-%d, offset %d, infosize %d", resource->tidx, i,
+               myFds[i], infoBuf[0], infoBuf[1], offset, infoSize);
+          // infoBuf[0] = -1;
+          // infoBuf[1] = -1;
           idle = 0;
 
           _debug_cntr++;
@@ -364,6 +365,11 @@ void* persistentRecvThread(void* args_) {
           continue;
         } else {
           ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
+	  if (t != NULL) {
+          if (r->reqIdx != t->reqIdx || t->reqIdx != tasks4Fds[i][0]) {
+	     WARN("r->reqIdx %d != t->reqIdx %d || t->reqIdx %d != tasks4Fds[i][0] %d", r->reqIdx, t->reqIdx, t->reqIdx, tasks4Fds[i][0]); 
+	  }
+	  }
           if (t != NULL && t->used == 1 && t->offset < t->size) {
             t->result =
                 socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
@@ -373,11 +379,15 @@ void* persistentRecvThread(void* args_) {
             }
             if (t->offset == t->size) {
               // task done, clear the flags in tasks4Fds
+              INFO(NCCL_ALL, "tid-fd %d-%d, recv completed, task %d-%d, size %d, offset %d, 4fds %d-%d",
+			      resource->tidx, myFds[i], t->reqIdx, t->posIdx, t->size, t->offset, tasks4Fds[i][0], tasks4Fds[i][1]);
               tasks4Fds[i][0] = -1;
               tasks4Fds[i][1] = -1;
-              // INFO(NCCL_ALL, "recv completed, task %d-%d, task ptr %p, size
-              // %d, offset %d", t->reqIdx, t->posIdx, t, t->size, t->offset);
             }
+	    else {
+              INFO(NCCL_ALL, "tid-fd %d-%d, recv prog, task %d-%d, size %d, offset %d, 4fds %d-%d", 
+			      resource->tidx, myFds[i], t->reqIdx, t->posIdx, t->size, t->offset, tasks4Fds[i][0], tasks4Fds[i][1]);
+	    }
           } else {
             // if (t != NULL) {
             //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p,
