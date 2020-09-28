@@ -336,9 +336,18 @@ void* persistentRecvThread(void* args_) {
       } else {
         int reqPos = comm->cnt2pos[tasks4Fds[i][0]];
         ncclSocketRequest* r = &comm->requests[reqPos];
-        ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
-        INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d, t-used %d", i, myFds[i],
-             tasks4Fds[i][0], tasks4Fds[i][1], r->used, t->used);
+        if (r != NULL) {
+          ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
+          if (t != NULL) {
+            INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d, t-used %d", i, myFds[i],
+              tasks4Fds[i][0], tasks4Fds[i][1], r->used, t->used);
+          } else {
+            INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d", i, myFds[i],
+              tasks4Fds[i][0], tasks4Fds[i][1], r->used);
+          }
+          
+        }
+        
       }
     }
     // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d",
