@@ -352,7 +352,7 @@ void* persistentRecvThread(void* args_) {
     }
     // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d",
     // _debug_cntr); 
-    usleep(500000);
+    // usleep(500000);
     _debug_cntr = 0;
     // recv task data
     for (int i = 0; i < nSocksPerThread; i++) {
