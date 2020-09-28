@@ -274,7 +274,7 @@ void* persistentRecvThread(void* args_) {
       (struct ncclSocketThreadResources*)args_;
   struct ncclSocketComm* comm = resource->comm;
   volatile enum threadState* state = &resource->state;
-  struct ncclSocketTaskQueue* taskQueue = resource->sharedTaskQueue;
+  // struct ncclSocketTaskQueue* taskQueue = resource->sharedTaskQueue;
   int nSocksPerThread = comm->nSocks / comm->nThreads;
   int tasks4Fds[MAX_SOCKETS][2];  // record pairs of req-idx and task-idx
   // init to all -1
@@ -586,8 +586,8 @@ ncclResult_t ncclSocketGetRequest(struct ncclSocketComm* comm,
                                   void* data,
                                   int size,
                                   struct ncclSocketRequest** req) {
-  u_long tid = getthreadid();
-  double startTime = us_now();
+  // u_long tid = getthreadid();
+  // double startTime = us_now();
   for (int i = 0; i < MAX_REQUESTS; i++) {
     struct ncclSocketRequest* r = comm->requests + i;
     if (r->used == 0) {
