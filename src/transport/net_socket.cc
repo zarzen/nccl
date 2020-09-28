@@ -144,6 +144,7 @@ struct ncclSocketRequest {
 struct ncclSocketTaskQueue {
   int head;
   int next;
+  int len;
   struct ncclSocketTask* tasks;
   pthread_mutex_t qLock;
   pthread_cond_t qCond;
@@ -248,6 +249,9 @@ void* persistentSendThread(void* args_) {
           // task done
           tasks4Fds[i] = -1;
           sentInfo[i] = 0;
+          pthread_mutex_lock(&taskQueue->qLock);
+          taskQueue->len--;
+          pthread_mutex_unlock(&taskQueue->qLock);
           // INFO(NCCL_ALL, "%lu send, complete task %d-%d, size %d", tid,
           // t->reqIdx, t->posIdx, t->size);
         }
@@ -274,7 +278,7 @@ void* persistentRecvThread(void* args_) {
       (struct ncclSocketThreadResources*)args_;
   struct ncclSocketComm* comm = resource->comm;
   volatile enum threadState* state = &resource->state;
-  // struct ncclSocketTaskQueue* taskQueue = resource->sharedTaskQueue;
+  struct ncclSocketTaskQueue* taskQueue = resource->sharedTaskQueue;
   int nSocksPerThread = comm->nSocks / comm->nThreads;
   int tasks4Fds[MAX_SOCKETS][2];  // record pairs of req-idx and task-idx
   // init to all -1
@@ -287,9 +291,6 @@ void* persistentRecvThread(void* args_) {
   int infoSize = 2 * sizeof(int);
 
   while (1) {
-    // int idle = 1;
-    // int mark = taskQueue->next;  // mark newest task seen
-
     // recv task info, in asyn way
     for (int i = 0; i < nSocksPerThread; i++) {
       if (tasks4Fds[i][0] < 0) {
@@ -321,7 +322,6 @@ void* persistentRecvThread(void* args_) {
           infoBuf[0] = -1;
           infoBuf[1] = -1;
           // idle = 0;
-
         }
       }
     }
@@ -355,34 +355,31 @@ void* persistentRecvThread(void* args_) {
             if (t->offset == t->size) {
               // task done, clear the flags in tasks4Fds
               // INFO(NCCL_ALL,
-              //      "tid-fd %d-%d, recv completed, task %d-%d, size %d, offset "
+              //      "tid-fd %d-%d, recv completed, task %d-%d, size %d, offset
+              //      "
               //      "%d, 4fds %d-%d",
               //      resource->tidx, myFds[i], t->reqIdx, t->posIdx, t->size,
               //      t->offset, tasks4Fds[i][0], tasks4Fds[i][1]);
               tasks4Fds[i][0] = -1;
               tasks4Fds[i][1] = -1;
-            } 
-          } 
+              pthread_mutex_lock(&taskQueue->qLock);
+              taskQueue->len--;
+              pthread_mutex_unlock(&taskQueue->qLock);
+            }
+          }
         }
-
-        // idle = 0;
       }
     }
-    // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task task data");
-    // check status for idle
-    // if (idle)
-    // {
-    //   pthread_mutex_lock(&taskQueue->qLock);
-    //   while (mark == taskQueue->next && *state != stop)
-    //   { // no new tasks, wait
-    //     INFO(NCCL_INIT | NCCL_NET, "tid %d, recv thd, enter idle",
-    //     resource->tidx); pthread_cond_wait(&taskQueue->qCond,
-    //     &taskQueue->qLock); INFO(NCCL_ALL, "tid %d, recv thd, wakeup",
-    //     resource->tidx);
-    //   }
-    //   pthread_mutex_unlock(&taskQueue->qLock);
-    // }
-
+    if (taskQueue->len == 0) {
+      pthread_mutex_lock(&taskQueue->qLock);
+      while (*state != stop && taskQueue->len == 0) {  // no new tasks, wait
+        INFO(NCCL_INIT | NCCL_NET, "tid %d, recv thd, enter idle",
+             resource->tidx);
+        pthread_cond_wait(&taskQueue->qCond, &taskQueue->qLock);
+        INFO(NCCL_ALL, "tid %d, recv thd, wakeup", resource->tidx);
+      }
+      pthread_mutex_unlock(&taskQueue->qLock);
+    }
     if (*state == stop) {
       return NULL;
     }
@@ -464,6 +461,7 @@ ncclResult_t ncclSocketInitComm(struct ncclSocketComm* comm, bool isRecv) {
   for (int i = 0; i < qSize; ++i) {
     comm->tasksQueues[i].next = 0;
     comm->tasksQueues[i].head = 0;
+    comm->tasksQueues[i].len = 0;
     NCCLCHECK(ncclCalloc(&comm->tasksQueues[i].tasks, MAX_QUEUE_LEN));
     pthread_mutex_init(&comm->tasksQueues[i].qLock, NULL);
     pthread_cond_init(&comm->tasksQueues[i].qCond, NULL);
@@ -646,6 +644,7 @@ ncclResult_t ncclSocketGetTask(struct ncclSocketComm* comm,
     // pthread_mutex_lock(&res->threadLock);
     pthread_mutex_lock(&queue->qLock);
     queue->next = (queue->next + 1) % MAX_QUEUE_LEN;
+    queue->len++;
     pthread_cond_signal(&queue->qCond);
     // res->state = start;
     // pthread_cond_signal(&res->threadCond);
