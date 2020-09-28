@@ -334,12 +334,16 @@ void* persistentRecvThread(void* args_) {
           _debug_cntr++;
         }
       } else {
-        INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d", i, myFds[i],
-             tasks4Fds[i][0], tasks4Fds[i][1]);
+        int reqPos = comm->cnt2pos[tasks4Fds[i][0]];
+        ncclSocketRequest* r = &comm->requests[reqPos];
+        ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
+        INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d, t-used %d", i, myFds[i],
+             tasks4Fds[i][0], tasks4Fds[i][1], r->used, t->used);
       }
     }
     // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d",
-    // _debug_cntr); usleep(500000);
+    // _debug_cntr); 
+    usleep(500000);
     _debug_cntr = 0;
     // recv task data
     for (int i = 0; i < nSocksPerThread; i++) {
