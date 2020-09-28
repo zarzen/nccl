@@ -110,13 +110,13 @@ ncclResult_t GetSocketAddr(int dev, union socketAddress *addr)
 /* Communication functions */
 
 #define MAX_SOCKETS 64
-#define MAX_THREADS 16
+#define MAX_THREADS 32
 #define MAX_REQUESTS 128
 // #define MAX_QUEUE_LEN MAX_REQUESTS
 #define MAX_QUEUE_LEN 256
 #define MIN_CHUNKSIZE (64 * 1024)
 #define MAX_NQ 8
-#define Q_SHARE 4 // for each 4 threads share one tasks queue
+#define Q_SHARE 8 // for each 4 threads share one tasks queue
 #define TASK_SIZE (128 * 1024)
 
 NCCL_PARAM(SocketNsocksPerThread, "NSOCKS_PERTHREAD", -2);
