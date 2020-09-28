@@ -230,7 +230,8 @@ void* persistentSendThread(void* args_) {
         infoBuf[1] = t->posIdx;
         socketSend(myFds[i], (void*)infoBuf, 2 * sizeof(int));
         sentInfo[i] = 1;
-        // INFO(NCCL_ALL, "tid %d, send-fd %d-%d, info %d-%d", resource->tidx, i,
+        // INFO(NCCL_ALL, "tid %d, send-fd %d-%d, info %d-%d", resource->tidx,
+        // i,
         //      myFds[i], infoBuf[0], infoBuf[1]);
       }
     }
@@ -307,7 +308,7 @@ void* persistentRecvThread(void* args_) {
         int offset = 0;
         int infoBuf[2] = {-1, -1};  // for receiving
         int infoSize = 2 * sizeof(int);
-	
+
         int result = socketProgress(NCCL_SOCKET_RECV, myFds[i], infoBuf,
                                     infoSize, &offset);
         if (result != ncclSuccess) {
@@ -326,8 +327,10 @@ void* persistentRecvThread(void* args_) {
         if (offset > 0) {
           tasks4Fds[i][0] = infoBuf[0];
           tasks4Fds[i][1] = infoBuf[1];
-          INFO(NCCL_ALL, "tid %d, recv-fd %d-%d, task %d-%d, offset %d, infosize %d", resource->tidx, i,
-               myFds[i], infoBuf[0], infoBuf[1], offset, infoSize);
+          INFO(NCCL_ALL,
+               "tid %d, recv-fd %d-%d, task %d-%d, offset %d, infosize %d",
+               resource->tidx, i, myFds[i], infoBuf[0], infoBuf[1], offset,
+               infoSize);
           // infoBuf[0] = -1;
           // infoBuf[1] = -1;
           idle = 0;
@@ -340,19 +343,20 @@ void* persistentRecvThread(void* args_) {
         // if (r != NULL) {
         //   ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
         //   if (t != NULL) {
-        //     INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d, t-used %d", i, myFds[i],
+        //     INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used
+        //     %d, t-used %d", i, myFds[i],
         //       tasks4Fds[i][0], tasks4Fds[i][1], r->used, t->used);
         //   } else {
-        //     INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used %d", i, myFds[i],
+        //     INFO(NCCL_ALL, "recv still has task, fd %d-%d, has %d-%d, r-used
+        //     %d", i, myFds[i],
         //       tasks4Fds[i][0], tasks4Fds[i][1], r->used);
         //   }
-          
+
         // }
-        
       }
     }
     // INFO(NCCL_INIT|NCCL_NET, "recv thd, recvd task info, new %d",
-    // _debug_cntr); 
+    // _debug_cntr);
     // usleep(500000);
     _debug_cntr = 0;
     // recv task data
@@ -360,16 +364,20 @@ void* persistentRecvThread(void* args_) {
       if (tasks4Fds[i][0] > -1) {
         int reqPos = comm->cnt2pos[tasks4Fds[i][0]];
         ncclSocketRequest* r = &comm->requests[reqPos];
-        if (r == NULL || r->used != 2) {
+        if (reqPos == -1 || r == NULL || r->used != 2) {
           // request is not ready
+          // corresponding request on local is not ready if "reqPos == -1";
           continue;
         } else {
           ncclSocketTask* t = r->tasks[tasks4Fds[i][1]];
-	  if (t != NULL) {
-          if (r->reqIdx != t->reqIdx || t->reqIdx != tasks4Fds[i][0]) {
-	     WARN("r->reqIdx %d != t->reqIdx %d || t->reqIdx %d != tasks4Fds[i][0] %d", r->reqIdx, t->reqIdx, t->reqIdx, tasks4Fds[i][0]); 
-	  }
-	  }
+          if (t != NULL) {
+            if (r->reqIdx != t->reqIdx || t->reqIdx != tasks4Fds[i][0]) {
+              WARN(
+                  "r->reqIdx %d != t->reqIdx %d || t->reqIdx %d != "
+                  "tasks4Fds[i][0] %d",
+                  r->reqIdx, t->reqIdx, t->reqIdx, tasks4Fds[i][0]);
+            }
+          }
           if (t != NULL && t->used == 1 && t->offset < t->size) {
             t->result =
                 socketProgress(t->op, myFds[i], t->data, t->size, &t->offset);
@@ -379,15 +387,20 @@ void* persistentRecvThread(void* args_) {
             }
             if (t->offset == t->size) {
               // task done, clear the flags in tasks4Fds
-              INFO(NCCL_ALL, "tid-fd %d-%d, recv completed, task %d-%d, size %d, offset %d, 4fds %d-%d",
-			      resource->tidx, myFds[i], t->reqIdx, t->posIdx, t->size, t->offset, tasks4Fds[i][0], tasks4Fds[i][1]);
+              INFO(NCCL_ALL,
+                   "tid-fd %d-%d, recv completed, task %d-%d, size %d, offset "
+                   "%d, 4fds %d-%d",
+                   resource->tidx, myFds[i], t->reqIdx, t->posIdx, t->size,
+                   t->offset, tasks4Fds[i][0], tasks4Fds[i][1]);
               tasks4Fds[i][0] = -1;
               tasks4Fds[i][1] = -1;
+            } else {
+              INFO(NCCL_ALL,
+                   "tid-fd %d-%d, recv prog, task %d-%d, size %d, offset %d, "
+                   "4fds %d-%d",
+                   resource->tidx, myFds[i], t->reqIdx, t->posIdx, t->size,
+                   t->offset, tasks4Fds[i][0], tasks4Fds[i][1]);
             }
-	    else {
-              INFO(NCCL_ALL, "tid-fd %d-%d, recv prog, task %d-%d, size %d, offset %d, 4fds %d-%d", 
-			      resource->tidx, myFds[i], t->reqIdx, t->posIdx, t->size, t->offset, tasks4Fds[i][0], tasks4Fds[i][1]);
-	    }
           } else {
             // if (t != NULL) {
             //   INFO(NCCL_ALL, "recv thd, recv data, reqidx %d, req ptr %p,
@@ -542,6 +555,10 @@ ncclResult_t ncclSocketInitComm(struct ncclSocketComm* comm, bool isRecv) {
   int qSize = comm->nThreads / Q_SHARE;
   qSize = qSize ? qSize : 1;
   comm->nTaskQ = qSize;
+  // init cnt2pos
+  for (int i = 0; i < MAX_REQUESTS; i++) {
+    comm->cnt2pos[i] = -1;  // mark no pos mapping yet
+  }
   // memory allocation for store tasks
   for (int i = 0; i < qSize; ++i) {
     comm->tasksQueues[i].next = 0;
@@ -804,6 +821,7 @@ ncclResult_t ncclSocketTest(void* request, int* done, int* size) {
         struct ncclSocketTask* sub = r->tasks[i];
         sub->used = 0;
       }
+      r->comm->cnt2pos[r->reqIdx] = -1;
       INFO(NCCL_ALL, "comp req-%s-%d, size %d, nSub %d, nComp %d, ctrlFd %d",
            r->op == 0 ? "send" : "recv", r->reqIdx, r->size, r->nSubs,
            nCompleted, r->ctrlFd);
