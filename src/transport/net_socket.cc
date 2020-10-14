@@ -18,6 +18,13 @@
 #include <limits.h>
 #include <fcntl.h>
 
+#include <chrono>
+
+double time_now() {
+  auto t = std::chrono::high_resolution_clock::now();
+  return t.time_since_epoch().count() / 1e9;  // convert to seconds
+};
+
 /* Init functions */
 static char ncclNetIfNames[MAX_IF_NAME_SIZE*MAX_IFS];
 static union socketAddress ncclNetIfAddrs[MAX_IFS];
@@ -100,6 +107,8 @@ struct ncclSocketTask {
   int fd;
   int offset;
   int used;
+  double st;
+  double et;
   ncclResult_t result;
 };
 
@@ -169,6 +178,9 @@ void* persistentSocketThread(void *args_) {
             }
             idle = 0;
             if (r->offset < r->size) repeat = 1;
+            if (r->offset == r->size) {
+              r->et = time_now();
+            }
           }
         }
       } while (repeat);
@@ -342,6 +354,7 @@ ncclResult_t ncclSocketGetTask(struct ncclSocketComm* comm, int op, void* data, 
     r->fd = comm->fds[comm->nextFd];
     r->offset = 0;
     r->result = ncclSuccess;
+    r->st = time_now();
     comm->nextFd = (comm->nextFd + 1) % comm->nSocks;
     r->used = 1;
     *req = r;
@@ -403,6 +416,7 @@ ncclResult_t ncclSocketTest(void* request, int* done, int* size) {
       r->used = 0;
       for (int i=0; i<r->nSubs; i++) {
         struct ncclSocketTask* sub = r->tasks[i];
+        INFO(NCCL_NET, "socketTaskDone:: %d, %d, %d, %f", sub->fd, sub->op, sub->size, sub->et - sub->st);
         sub->used = 0;
       }
     }
