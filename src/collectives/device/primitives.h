@@ -118,7 +118,8 @@ class ncclPrimitives {
   }
 
   inline __device__ void postSendSize(int i, int size) {
-    if (sendConn[i]->fifo) sendConn[i]->fifo[sendStep[i]%NCCL_STEPS] = size;
+    // if (sendConn[i]->fifo) sendConn[i]->fifo[sendStep[i]%NCCL_STEPS] = size;
+    if (sendConn[i]->fifo) sendConn[i]->fifo[sendStep[i]%NCCL_STEPS] = 0;
   }
 
   template <int DIRECTRECV>
