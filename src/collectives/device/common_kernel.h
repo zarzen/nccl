@@ -252,9 +252,11 @@ __device__ __forceinline__ void ReduceCopyMulti(const int tid, const int nthread
   for (int idx = offset+tid; idx < offset+N; idx += nthreads) {
     T val = vFetch(srcs[0]+idx);
     #pragma unroll
-    for (int i=1; i<MINSRCS; i++) val = FUNC()(val, vFetch(srcs[i]+idx));
+    for (int i=1; i<MINSRCS; i++) val = vFetch(srcs[i]+idx); // do value fetching but not the function application
+    // for (int i=1; i<MINSRCS; i++) val = FUNC()(val, vFetch(srcs[i]+idx));
     #pragma unroll 1
-    for (int i=MINSRCS; i<MAXSRCS && i<nsrcs; i++) val = FUNC()(val, vFetch(srcs[i]+idx));
+    for (int i=MINSRCS; i<MAXSRCS && i<nsrcs; i++) val = vFetch(srcs[i]+idx); // do value fetching but not the function application
+    // for (int i=MINSRCS; i<MAXSRCS && i<nsrcs; i++) val = FUNC()(val, vFetch(srcs[i]+idx));
 
     #pragma unroll
     for (int i=0; i<MINDSTS; i++) vStore(dsts[i]+idx, val);
@@ -285,13 +287,15 @@ __device__ __forceinline__ void ReduceCopy128bMulti( const int w, const int nw, 
     for (int i=1; i<MINSRCS; i++) {
       Pack128 vals2[UNROLL];
       for (int u = 0; u < UNROLL; ++u) Fetch128(vals2[u], srcs[i]+u*WARP_SIZE);
-      for (int u = 0; u < UNROLL; ++u) MULTI128<FUNC, T>()(vals[u], vals2[u]);
+      // remove the function application on two vals
+      // for (int u = 0; u < UNROLL; ++u) MULTI128<FUNC, T>()(vals[u], vals2[u]);
     }
     #pragma unroll 1
     for (int i=MINSRCS; i<MAXSRCS && i<nsrcs; i++) {
       Pack128 vals2[UNROLL];
       for (int u = 0; u < UNROLL; ++u) Fetch128(vals2[u], srcs[i]+u*WARP_SIZE);
-      for (int u = 0; u < UNROLL; ++u) MULTI128<FUNC, T>()(vals[u], vals2[u]);
+      // remove the function application on two vals
+      // for (int u = 0; u < UNROLL; ++u) MULTI128<FUNC, T>()(vals[u], vals2[u]);
     }
 
     // Store
